@@ -38,27 +38,7 @@ Back
 slightRightBack
 '''
 
-# class slightLeft(object):
-#     def __init__(self):
-#         pass
 
-#     def is_legal(self, data):
-#         if(isDiagonalPos(data)):
-#             #checks once map is well defined
-#         else:
-#             #checks once map is well defined
-        
-#         return True
-
-#     def update_state(self, data):
-#         if(data.orientation == N): takeStep(data, (-1, 0))
-#         elif(data.orientation == NE): takeStep(data, (-1, +1))
-#         elif(data.orientation == E): takeStep(data, (0, +1))
-#         elif(data.orientation == SE): takeStep(data, (+1, +1))
-#         elif(data.orientation == S): takeStep(data, (+1, 0))
-#         elif(data.orientation == SW): takeStep(data, (+1, -1))
-#         elif(data.orientation == W): takeStep(data, (0, -1))
-#         elif(data.orientation == NW): takeStep(data, (-1, -1))
 
 
 
@@ -199,7 +179,7 @@ def run(width, height, start, plan):
     data.orientation = theta
     data.t = 0
     data.plan = plan
-    data.timerDelay = 100 # milliseconds
+    data.timerDelay = 500 # milliseconds
     root = Tk()
     root.resizable(width=False, height=False) # prevents resizing window
     init(data)
@@ -236,17 +216,29 @@ def parse_map(map_file):
     return map_env
 
 
+
+def actions_to_steps(plan, start):
+    steps = []
+    newState = start
+    for action in plan:
+        steps.extend(action.effects(newState))
+        newState = apply_action(newState, action.effects(newState))
+    return steps
+
+
 map_env = parse_map("map1.txt")
 
 start = (0, 0, 0)
-goal = (1, 1, 2)
+goal = (0, 3, 0)
 plan = plan(start, goal, map_env)
-
 print(plan)
 
-fake_plan = [(0, +1, 0), (0, +1, 0), (0, +1, 0), (+1, +1, -2)]
+steps = actions_to_steps(plan, start)
+print(steps)
+
+# fake_plan = [(0, +1, 0), (0, +1, 0), (0, +1, 0), (+1, +1, -2)]
 
 #visualize plan
-run(800, 800, start, fake_plan)
+run(800, 800, start, steps)
 
 
