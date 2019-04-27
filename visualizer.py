@@ -23,30 +23,26 @@ W = 8
 SW = 10
 S = 12
 SE = 14
+    
 
-'''
-Actions:
-
-sharpLeft
-slightLeft
-Fwd
-slightRight
-sharpRight
-
-slightLeftBack
-Back
-slightRightBack
-'''
+def update_sensors(data):
+    (r, c) = data.pos 
 
 
 
-
-
-def init(data):
-    # image = Image.open("car_2inch.gif")
-    data.rows = NUM_ROWS
-    data.cols = NUM_COLS
+def init(data, width, height, start, plan, map_env):
+    (r, c, theta) = start
+    data.rows = len(map_env)
+    data.cols = len(map_env[0])
     data.margin = 5 # margin around grid
+    data.width = width
+    data.height = height
+    data.pos = (r, c)
+    data.orientation = theta
+    data.t = 0
+    data.plan = plan
+    data.map = map_env
+    data.view = [[0 for c in range(data.cols)] for r in range(data.rows)]
     data.vehicle = [
         PhotoImage(file="car_1inch.gif"),
         PhotoImage(file="car22_5.gif"),
@@ -65,7 +61,6 @@ def init(data):
         PhotoImage(file="car315.gif"),   
         PhotoImage(file="car337_5.gif")
     ]
-    data.timerDelay = 250
 
 # getCellBounds from grid-demo.py
 def getCellBounds(row, col, data):
@@ -84,7 +79,6 @@ def mousePressed(event, data):
 
 def isDiagonalPos(data):
     return (data.orientation % 4) == 2
-
 
 # This is really just for debugging purposes
 def moveForward(data, heading):
@@ -128,7 +122,21 @@ def drawBoard(canvas, data):
     for row in range(data.rows):
         for col in range(data.cols):
             (x0, y0, x1, y1) = getCellBounds(row, col, data)
-            canvas.create_rectangle(x0, y0, x1, y1, outline="red", fill="black")
+            if(data.map[row][col] == 0):
+                canvas.create_rectangle(x0, y0, x1, y1, outline="red",
+                                        fill="black")
+            else:
+                canvas.create_rectangle(x0, y0, x1, y1, outline="red",
+                                        fill="yellow")
+            
+            if(data.view[row][col] == 0):
+                canvas.create_rectangle(x0 + data.width, y0,
+                                        x1 + data.width, y1, outline="red",
+                                        fill="black")
+            else:
+                canvas.create_rectangle(x0 + data.width, y0,
+                                        x1 + data.width, y1, outline="red",
+                                        fill="yellow")
 
 def drawVehicle(canvas, data):
     (row, col) = data.pos
@@ -136,6 +144,9 @@ def drawVehicle(canvas, data):
     cellWidth  = (data.width - 2*data.margin) / data.cols
     cellHeight = (data.height - 2*data.margin)  / data.rows
     canvas.create_image(x0+(cellWidth/2), y0+(cellHeight/2),
+                        image=data.vehicle[data.orientation])
+    canvas.create_image(x0 + (cellWidth/2) + data.width,
+                        y0 + (cellHeight/2),
                         image=data.vehicle[data.orientation])
 
 def redrawAll(canvas, data):
@@ -146,10 +157,10 @@ def redrawAll(canvas, data):
 # use the run function as-is
 ####################################
 
-def run(width, height, start, plan):
+def run(width, height, start, plan, map_env):
     def redrawAllWrapper(canvas, data):
         canvas.delete(ALL)
-        canvas.create_rectangle(0, 0, data.width, data.height,
+        canvas.create_rectangle(0, 0, (2*data.width), data.height,
                                 fill='black', width=0)
         redrawAll(canvas, data)
         canvas.update()    
@@ -170,21 +181,13 @@ def run(width, height, start, plan):
     # Set up data and call init
     class Struct(object): pass
 
-    (r, c, theta) = start
-
     data = Struct()
-    data.width = width
-    data.height = height
-    data.pos = (r, c)
-    data.orientation = theta
-    data.t = 0
-    data.plan = plan
     data.timerDelay = 500 # milliseconds
     root = Tk()
     root.resizable(width=False, height=False) # prevents resizing window
-    init(data)
+    init(data, width, height, start, plan, map_env)
     # create the root and the canvas
-    canvas = Canvas(root, width=data.width, height=data.height)
+    canvas = Canvas(root, width=(2*data.width), height=data.height)
     canvas.configure(bd=0, highlightthickness=0)
     canvas.pack()
     # set up events
@@ -215,8 +218,6 @@ def parse_map(map_file):
         map_env.append(col)
     return map_env
 
-
-
 def actions_to_steps(plan, start):
     steps = []
     newState = start
@@ -226,19 +227,19 @@ def actions_to_steps(plan, start):
     return steps
 
 
-map_env = parse_map("map1.txt")
+map_env = parse_map("map2.txt")
 
-start = (0, 0, 0)
-goal = (0, 3, 0)
+start = (1, 0, E)
+goal = (4, 6, W)
 plan = plan(start, goal, map_env)
 print(plan)
 
 steps = actions_to_steps(plan, start)
 print(steps)
-
+print(start)
 # fake_plan = [(0, +1, 0), (0, +1, 0), (0, +1, 0), (+1, +1, -2)]
 
 #visualize plan
-run(800, 800, start, steps)
+run(800, 800, start, steps, map_env)
 
 
