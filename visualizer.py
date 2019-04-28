@@ -1,5 +1,6 @@
 # Autonomous Parking Simulator
 
+import sys
 from tkinter import *
 from PIL import Image, ImageTk
 from map_environment import *
@@ -9,19 +10,25 @@ import time
 
 # visualizer should take a sequence of updates (dr, dc, d0)
 
-MAP_FILE = "40x40map2.txt"
+MAP_FILE = "40x40map4.txt"
+FULL = 0
+PARTIAL = 1
+
+#NOTE: these coordinates must be even
+start_config = (8, 2, E)
+goal_config = (8, 34, E)
+model_type = FULL
+alpha = 1
+
+
 GRID_WIDTH = 800
 GRID_HEIGHT = 800
 
-FREE = 0
-OBSTACLE = 1
-COVERED = 2
-GOAL = 3
-
 def update_sensors(data):
-    (r, c) = data.pos
+    if(model_type == FULL): return
 
-    rad = 4
+    (r, c) = data.pos
+    rad = SENSOR_RAD
     for dr in range(-rad, rad+1):
         for dc in range(-rad, rad+1):
             newR = r + dr
@@ -34,6 +41,8 @@ def update_sensors(data):
 
 def init(data, start, plan, goal, map_env):
     (r, c, theta) = start
+    data.timerDelay = 200 # milliseconds
+    data.divider_size = 80
     data.rows = map_env.rows
     data.cols = map_env.cols
     data.margin = map_env.margin
@@ -45,7 +54,10 @@ def init(data, start, plan, goal, map_env):
     data.plan = plan
     data.map = copy(map_env.map)
     data.map_obj = map_env
-    data.view = [[0 for c in range(data.cols)] for r in range(data.rows)]
+    if(model_type == PARTIAL):
+        data.view = [[0 for c in range(data.cols)] for r in range(data.rows)]
+    else:
+        data.view = copy(map_env.map)
     data.vehicle = [
         PhotoImage(file="imgs/car_1inch.gif"),
         PhotoImage(file="imgs/car22_5.gif"),
@@ -105,16 +117,23 @@ def takeStep(data, action):
     data.pos = (newRow, newCol)
     data.orientation =  (data.orientation + d0) % 16
 
-    (row, col) = data.pos
-    (x0, y0, x1, y1) = getCellBounds(row, col, data)
+    # Update Tracks as you go
+    (x0, y0, x1, y1) = getCellBounds(newRow, newCol, data)
     c1 = get_vehicle_coverage(x0, y0, data.orientation, data.map_obj)
     for (r,c) in c1:
         data.view[r][c] = COVERED
         data.map[r][c] = COVERED
+
     update_sensors(data)
     
     
 def drawBoard(canvas, data):
+    data.divider_size
+    canvas.create_rectangle
+    canvas.create_rectangle(data.width, 0,
+                            data.width + data.divider_size, data.height,
+                            outline="blue",
+                            fill="black")
     for row in range(data.rows):
         for col in range(data.cols):
             (x0, y0, x1, y1) = getCellBounds(row, col, data)            
@@ -132,20 +151,24 @@ def drawBoard(canvas, data):
                                         fill="red")
             
             if(data.map[row][col] == FREE):
-                canvas.create_rectangle(x0 + data.width, y0,
-                                        x1 + data.width, y1, outline="blue",
+                canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
+                                        x1 + data.width + data.divider_size, y1,
+                                        outline="blue",
                                         fill="black")
             elif(data.map[row][col] == OBSTACLE):
-                canvas.create_rectangle(x0 + data.width, y0,
-                                        x1 + data.width, y1, outline="blue",
+                canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
+                                        x1 + data.width + data.divider_size, y1,
+                                        outline="blue",
                                         fill="blue")
             elif(data.map[row][col] == COVERED):
-                canvas.create_rectangle(x0 + data.width, y0,
-                                        x1 + data.width, y1, outline="blue",
+                canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
+                                        x1 + data.width + data.divider_size, y1,
+                                        outline="blue",
                                         fill="gray")
             elif(data.map[row][col] == GOAL):
-                canvas.create_rectangle(x0 + data.width, y0,
-                                        x1 + data.width, y1, outline="blue",
+                canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
+                                        x1 + data.width + data.divider_size, y1,
+                                        outline="blue",
                                         fill="red")
 
 def drawVehicle(canvas, data):
@@ -153,19 +176,36 @@ def drawVehicle(canvas, data):
     (x0, y0, x1, y1) = getCellBounds(row, col, data)
     canvas.create_image(x0, y0,
                         image=data.vehicle[data.orientation])
-    canvas.create_image(x0 + data.width,
+    canvas.create_image(x0 + data.width + data.divider_size,
                         y0,
                         image=data.vehicle[data.orientation])
+
+def drawLabels(canvas, data):
+    canvas.create_text(data.width/2, 740,
+                       fill="green", text="Driver View", font="Lato 40")
+    canvas.create_text((1.5)*data.width + data.divider_size, 740,
+                       fill="green", text="Full Model", font="Lato 40")
 
 def redrawAll(canvas, data):
     drawBoard(canvas, data)
     drawVehicle(canvas, data)
+    drawLabels(canvas, data)
 
 
-def run(start, plan, goal, map_env):
+def setup_canvas(root, data):
+    canvas = Canvas(root,
+                    width=(2*data.width) + data.divider_size,
+                    height=data.height)
+    canvas.configure(bd=0, highlightthickness=0)
+    canvas.pack()
+    return canvas
+
+def visualize(start, plan, goal, map_env):
     def redrawAllWrapper(canvas, data):
         canvas.delete(ALL)
-        canvas.create_rectangle(0, 0, (2*data.width), data.height,
+        canvas.create_rectangle(0, 0,
+                                (2*data.width) + data.divider_size,
+                                data.height,
                                 fill='black', width=0)
         redrawAll(canvas, data)
         canvas.update()    
@@ -177,47 +217,63 @@ def run(start, plan, goal, map_env):
         canvas.after(data.timerDelay, timerFiredWrapper, canvas, data)
 
     # Set up data and call init
-    class Struct(object): pass
+    class Visualizer(object): pass
 
-    data = Struct()
-    data.timerDelay = 200 # milliseconds
+    data = Visualizer()
     root = Tk()
     root.resizable(width=False, height=False) # prevents resizing window
+    root.title("Autonomous Vehicle Parking Planner Simulator")
     init(data, start, plan, goal, map_env)
 
-    # create the root and the canvas
-    canvas = Canvas(root, width=(2*data.width), height=data.height)
-    canvas.configure(bd=0, highlightthickness=0)
-    canvas.pack()
+    # create the canvas
+    canvas = setup_canvas(root, data)
 
     timerFiredWrapper(canvas, data)
     # and launch the app
     root.mainloop()  # blocks until window is closed
 
-def actions_to_steps(plan, start):
-    steps = []
-    newState = start
-    for action in plan:
-        steps.extend(action.effects(newState))
-        newState = apply_action(newState, action.effects(newState))
-    return steps
-
-
-
-if __name__ == '__main__':
+def run_planner():
     start_time = time.time()
-    map_env = Map_Environment(MAP_FILE, GRID_WIDTH, GRID_HEIGHT)
+    if(model_type == FULL):
+        plan = planner_full_known(start_config, goal_config, alpha, map_env)
+    else:
+        plan = planner_partial_known(start_config, goal_config, alpha, map_env)
 
-    #NOTE: these coordinates must be even
-    start = (8, 2, E)
-    goal = (8, 34, W)
-    actions = plan(start, goal, map_env)
-    plan = actions_to_steps(actions, start)
     end_time = time.time()
     total_time = end_time - start_time
+
     print("Planner took %f seconds to compute:" % total_time)
 
+    return plan
+
+def usage():
+    print("USAGE:")
+    print("\t python3 visualizer.py  [alpha] --full")
+    print("\t python3 visualizer.py  [alpha] --partial")
+
+def parse_arguments():
+    global model_type
+    global alpha
+    try:
+        alpha = float(sys.argv[1])
+        mtype = sys.argv[2][2:]
+        if(mtype == "partial"):
+            model_type = PARTIAL
+        elif(mtype == "full"):
+            model_type = FULL
+        else:
+            usage()
+            sys.exit(1)
+    except:
+        usage()
+        sys.exit(1)
+
+if __name__ == '__main__':
+    parse_arguments()
+    map_env = Map_Environment(MAP_FILE, GRID_WIDTH, GRID_HEIGHT)
+    plan = run_planner()
+
     # visualize plan
-    run(start, plan, goal, map_env)
+    visualize(start_config, plan, goal_config, map_env)
 
 

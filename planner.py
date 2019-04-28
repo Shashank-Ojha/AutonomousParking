@@ -1,6 +1,7 @@
 from heapq import *
 import numpy
 from math import *
+import copy
 
 E = 0
 NE = 2
@@ -25,6 +26,13 @@ SOUTH = +2
 EAST = +2
 WEST = -2
 CONSTANT = 0
+
+FREE = 0
+OBSTACLE = 1
+COVERED = 2
+GOAL = 3
+
+SENSOR_RAD = 5
 
 coverage_map = {}
 vehicle_template = {}
@@ -371,6 +379,15 @@ class Backward(Action):
     def __repr__(self):
       return "Backward"
 
+class Halt(Action):
+    def __init__(self):
+        self.cost = 0
+
+    def effects(self, state):
+      return [(CONSTANT, CONSTANT, CONSTANT)]
+      
+    def __repr__(self):
+      return "Halt"
 '''
 +-----------------------------------------------------------------------------+
 |                                                                             |
@@ -380,10 +397,11 @@ class Backward(Action):
 '''
 
 class GraphState(object):
-    def __init__(self, state, g, f, prevAction, prevGraphState):
+    def __init__(self, state, g, f, prevAction, prevGraphState, v = 0):
         self.state = state
         self.g = g
         self.f = f
+        self.v = v # Only for D*
         self.prevAction = prevAction
         self.prevGraphState = prevGraphState
 
@@ -406,8 +424,6 @@ def heuristic(state, goal):
   delta_c = (c2 - c1) / 2
   distance = (delta_r * delta_r) + (delta_c * delta_c)
   return sqrt(distance)
-
-
 
 def generate_action_template():
   action_template = []
@@ -442,6 +458,8 @@ def apply_action(state, action):
     (r, c, theta) = (r+dr, c+dc, new_theta)
   return (r, c, theta)
 
+
+
 def backtrace(graphState, start):
   actions = []
   while(graphState.state != start):
@@ -450,13 +468,13 @@ def backtrace(graphState, start):
   actions.reverse()    
   return actions
 
-def A_star(start, goal, map_env, action_template):
+def A_star(start, goal, alpha, map_env, action_template):
   pq = []
   visited = set()
   heappush(pq, GraphState(start, 0, 0, None, None))
   while(len(pq) > 0):
     currState = heappop(pq)
-    visited.add(currState)
+    visited.add(currState.state)
 
     if(currState.state == goal):
       plan = backtrace(currState, start)
@@ -469,27 +487,118 @@ def A_star(start, goal, map_env, action_template):
       newState = apply_action(currState.state, action.effects(currState.state))
       g = currState.g + action.get_cost()
       h = heuristic(newState, goal)
-      f = g + 5*h
+      f = g + alpha*h
       neighbor = GraphState(newState, g, f, action, currState)
-      if(neighbor not in visited):
+      if(newState not in visited):
         heappush(pq, neighbor)
   
   print("Plan NOT found")
   return []
 
+def computePathWithReuse(start, goal, alpha, visited, view, action_template):
+  pq = []
+  visited = {}
+  heappush(pq, GraphState(start, 0, 0, None, None))
+  while(len(pq) > 0):
+    currState = heappop(pq)
+    visited[currState.state] = currState
 
-'''
-start = (x, y, 0)
-goal = (x, y, 0)
-map will be a 2D array of numbers
-  0 = Free
-  1 = Obstacle
-  TODO: add vehicle in different orientations as obstacles later
+    if(currState.state == goal):
+      plan = backtrace(currState, start)
+      print("Plan found:", plan)
+      return plan
 
-This planner will return a sequence of actions in an array. Each action has 
-the format (dx, dy, d0)
-'''
-def plan(start, goal, map_env):
+    
+    actions = generate_successors(currState.state, view, action_template)
+    for action in actions:
+      newState = apply_action(currState.state, action.effects(currState.state))
+      g = currState.g + action.get_cost()
+      h = heuristic(newState, goal)
+      f = g + alpha*h
+      neighbor = GraphState(newState, g, f, action, currState)
+      if(newState not in visited):
+        heappush(pq, neighbor)
+  
+  print("Plan NOT found")
+  return []
+
+def update_view(truth, view, pos):
+    (r, c, _) = pos
+    rad = SENSOR_RAD
+    updated = []
+    for dr in range(-rad, rad+1):
+        for dc in range(-rad, rad+1):
+            nR = r + dr
+            nC = c + dc
+            inRowRange = (0 <= nR) and (nR < len(truth.map))
+            inColRange = (0 <= nC) and (nC < len(truth.map[0]))
+
+            if(not inRowRange or not inColRange):
+              continue
+
+            if(truth.map[nR][nC] == OBSTACLE and view.map[nR][nC] != OBSTACLE):
+                updated.append((nR, nC))
+                view.map[nR][nC] = OBSTACLE
+                
+    return updated
+
+def D_star(start, goal, alpha, map_env, action_template):
+  view = copy.deepcopy(map_env)
+
+  #clear knowledge of the map
+  for r in range(len(view.map)):
+    for c in range(len(view.map[0])):
+      view.map[r][c] = 0
+
+  visited = {}
+  actions = []
+  pos = start
+  while(True):
+    current_optimal = computePathWithReuse(start, goal, alpha, visited,
+                                           view, action_template)
+    #check to see if path has changed and update full path based on that
+
+    for action in current_optimal:
+      pos = apply_action(pos, action.effects(pos))
+      actions.append(action)
+      if(pos == goal):
+        return actions
+
+      cells_updated = update_view(map_env, view, pos)
+      if(cells_updated):
+        break
+    
+    # must be the case that view was updated
+
+    # Need to propogate inconsistent states (HARD PART)
+    # for (r, c) in cells_updated:
+    #   for theta in range(len(ANGLE_DENSITY)):
+    #     if((r,c,theta) in visited):
+    actions.append(Halt())
+    start = pos  
+
+
+
+def actions_to_steps(actions, start):
+    steps = []
+    newState = start
+    for action in actions:
+        steps.extend(action.effects(newState))
+        newState = apply_action(newState, action.effects(newState))
+    return steps
+
+def planner_full_known(start, goal, alpha, map_env):
   action_template = generate_action_template()
   generate_vehicle_templates()
-  return A_star(start, goal, map_env, action_template)
+  actions = A_star(start, goal, alpha, map_env, action_template)
+  plan = actions_to_steps(actions, start)
+  return plan 
+
+def planner_partial_known(start, goal, alpha, map_env):
+  action_template = generate_action_template()
+  generate_vehicle_templates()
+  actions = D_star(start, goal, alpha, map_env, action_template)
+  plan = actions_to_steps(actions, start)
+  return plan
+
+  

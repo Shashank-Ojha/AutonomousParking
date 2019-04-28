@@ -1,0 +1,16 @@
+Good Test Cases for each map
+
+40x40map2.txt 
+  alpha = 5
+  start = (8, 2, E)
+  goal = (8, 34, W)
+
+40x40map3.txt 
+  alpha = 2
+  start = (8, 2, E)
+  goal = (8, 34, E)
+
+40x40map4.txt 
+  alpha = 2
+  start = (8, 2, E)
+  goal = (8, 34, E)
