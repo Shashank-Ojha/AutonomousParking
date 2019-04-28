@@ -2,67 +2,60 @@
 
 from tkinter import *
 from PIL import Image, ImageTk
-import random
+from map_environment import *
 from planner import *
-
-# state is defined as (row, col, theta)
-
-# slight actions have two updates
+from copy import copy
+import time
 
 # visualizer should take a sequence of updates (dr, dc, d0)
 
+MAP_FILE = "40x40map2.txt"
+GRID_WIDTH = 800
+GRID_HEIGHT = 800
 
-NUM_ROWS = 10
-NUM_COLS = 10
-
-E = 0
-NE = 2
-N = 4
-NW = 6
-W = 8
-SW = 10
-S = 12
-SE = 14
-    
+FREE = 0
+OBSTACLE = 1
+COVERED = 2
 
 def update_sensors(data):
     (r, c) = data.pos 
 
-
-
-def init(data, width, height, start, plan, map_env):
+def init(data, start, plan, map_env):
     (r, c, theta) = start
-    data.rows = len(map_env)
-    data.cols = len(map_env[0])
-    data.margin = 5 # margin around grid
-    data.width = width
-    data.height = height
+    data.rows = map_env.rows
+    data.cols = map_env.cols
+    data.margin = map_env.margin
+    data.width = map_env.grid_width
+    data.height = map_env.grid_height
     data.pos = (r, c)
     data.orientation = theta
     data.t = 0
     data.plan = plan
-    data.map = map_env
+    data.map = copy(map_env.map)
+    data.map_obj = map_env
     data.view = [[0 for c in range(data.cols)] for r in range(data.rows)]
     data.vehicle = [
-        PhotoImage(file="car_1inch.gif"),
-        PhotoImage(file="car22_5.gif"),
-        PhotoImage(file="car45.gif"),
-        PhotoImage(file="car67_5.gif"),
-        PhotoImage(file="car90.gif"),
-        PhotoImage(file="car112_5.gif"),
-        PhotoImage(file="car135.gif"),
-        PhotoImage(file="car157_5.gif"),
-        PhotoImage(file="car180.gif"),
-        PhotoImage(file="car202_5.gif"),
-        PhotoImage(file="car225.gif"),
-        PhotoImage(file="car247_5.gif"),
-        PhotoImage(file="car270.gif"),
-        PhotoImage(file="car292_5.gif"),
-        PhotoImage(file="car315.gif"),   
-        PhotoImage(file="car337_5.gif")
+        PhotoImage(file="imgs/car_1inch.gif"),
+        PhotoImage(file="imgs/car22_5.gif"),
+        PhotoImage(file="imgs/car45.gif"),
+        PhotoImage(file="imgs/car67_5.gif"),
+        PhotoImage(file="imgs/car90.gif"),
+        PhotoImage(file="imgs/car112_5.gif"),
+        PhotoImage(file="imgs/car135.gif"),
+        PhotoImage(file="imgs/car157_5.gif"),
+        PhotoImage(file="imgs/car180.gif"),
+        PhotoImage(file="imgs/car202_5.gif"),
+        PhotoImage(file="imgs/car225.gif"),
+        PhotoImage(file="imgs/car247_5.gif"),
+        PhotoImage(file="imgs/car270.gif"),
+        PhotoImage(file="imgs/car292_5.gif"),
+        PhotoImage(file="imgs/car315.gif"),   
+        PhotoImage(file="imgs/car337_5.gif")
     ]
+    # for i in data.vehicle: //TODO: look into this
+    #     print(i.width(), i.height())
 
-# getCellBounds from grid-demo.py
+
 def getCellBounds(row, col, data):
     # aka "modelToView"
     # returns (x0, y0, x1, y1) corners/bounding box of given cell in grid
@@ -73,33 +66,6 @@ def getCellBounds(row, col, data):
     y0 = data.margin + gridHeight * row / data.rows
     y1 = data.margin + gridHeight * (row+1) / data.rows
     return (x0, y0, x1, y1)
-
-def mousePressed(event, data):
-    pass
-
-def isDiagonalPos(data):
-    return (data.orientation % 4) == 2
-
-# This is really just for debugging purposes
-def moveForward(data, heading):
-    if(data.orientation == N): takeStep(data, (-1, 0, heading))
-    elif(data.orientation == NE): takeStep(data, (-1, +1, heading))
-    elif(data.orientation == E): takeStep(data, (0, +1, heading))
-    elif(data.orientation == SE): takeStep(data, (+1, +1, heading))
-    elif(data.orientation == S): takeStep(data, (+1, 0, heading))
-    elif(data.orientation == SW): takeStep(data, (+1, -1, heading))
-    elif(data.orientation == W): takeStep(data, (0, -1, heading))
-    elif(data.orientation == NW): takeStep(data, (-1, -1, heading))
-
-
-def keyPressed(event, data):
-    # if (event.keysym == "Up"):      data.direction = (-1, 0)
-    # elif (event.keysym == "Down"):  data.direction = (+1, 0)
-    # elif (event.keysym == "Left"):  data.direction = (0, -1)
-    # elif (event.keysym == "Right"): data.direction = (0, +1)
-    if (event.keysym == "q"):  moveForward(data, 2)
-    elif (event.keysym == "w"):  moveForward(data, 0)
-    elif (event.keysym == "e"): moveForward(data, -2)
 
 def timerFired(data):
     if(data.t < len(data.plan)):
@@ -115,49 +81,60 @@ def takeStep(data, action):
         (newCol < 0) or (newCol >= data.cols)):
         print("Illegal Move")
         return
+
     data.pos = (newRow, newCol)
     data.orientation =  (data.orientation + d0) % 16
+
+    (row, col) = data.pos
+    (x0, y0, x1, y1) = getCellBounds(row, col, data)
+    c1 = get_vehicle_coverage(x0, y0, data.orientation, data.map_obj)
+    for (r,c) in c1:
+        data.view[r][c] = COVERED
+        data.map[r][c] = COVERED
+    
     
 def drawBoard(canvas, data):
     for row in range(data.rows):
         for col in range(data.cols):
-            (x0, y0, x1, y1) = getCellBounds(row, col, data)
-            if(data.map[row][col] == 0):
+            (x0, y0, x1, y1) = getCellBounds(row, col, data)            
+            if(data.view[row][col] == FREE):
                 canvas.create_rectangle(x0, y0, x1, y1, outline="red",
                                         fill="black")
-            else:
+            elif(data.view[row][col] == OBSTACLE):
                 canvas.create_rectangle(x0, y0, x1, y1, outline="red",
                                         fill="yellow")
+            elif(data.view[row][col] == COVERED):
+                canvas.create_rectangle(x0, y0, x1, y1, outline="red",
+                                        fill="blue")
             
-            if(data.view[row][col] == 0):
+            if(data.map[row][col] == FREE):
                 canvas.create_rectangle(x0 + data.width, y0,
                                         x1 + data.width, y1, outline="red",
                                         fill="black")
-            else:
+            elif(data.map[row][col] == OBSTACLE):
                 canvas.create_rectangle(x0 + data.width, y0,
                                         x1 + data.width, y1, outline="red",
                                         fill="yellow")
+            elif(data.map[row][col] == COVERED):
+                canvas.create_rectangle(x0 + data.width, y0,
+                                        x1 + data.width, y1, outline="red",
+                                        fill="blue")
 
 def drawVehicle(canvas, data):
     (row, col) = data.pos
     (x0, y0, x1, y1) = getCellBounds(row, col, data)
-    cellWidth  = (data.width - 2*data.margin) / data.cols
-    cellHeight = (data.height - 2*data.margin)  / data.rows
-    canvas.create_image(x0+(cellWidth/2), y0+(cellHeight/2),
+    canvas.create_image(x0, y0,
                         image=data.vehicle[data.orientation])
-    canvas.create_image(x0 + (cellWidth/2) + data.width,
-                        y0 + (cellHeight/2),
+    canvas.create_image(x0 + data.width,
+                        y0,
                         image=data.vehicle[data.orientation])
 
 def redrawAll(canvas, data):
     drawBoard(canvas, data)
     drawVehicle(canvas, data)
 
-####################################
-# use the run function as-is
-####################################
 
-def run(width, height, start, plan, map_env):
+def run(start, plan, map_env):
     def redrawAllWrapper(canvas, data):
         canvas.delete(ALL)
         canvas.create_rectangle(0, 0, (2*data.width), data.height,
@@ -165,58 +142,29 @@ def run(width, height, start, plan, map_env):
         redrawAll(canvas, data)
         canvas.update()    
 
-    def mousePressedWrapper(event, canvas, data):
-        mousePressed(event, data)
-        redrawAllWrapper(canvas, data)
-
-    def keyPressedWrapper(event, canvas, data):
-        keyPressed(event, data)
-        redrawAllWrapper(canvas, data)
-
     def timerFiredWrapper(canvas, data):
         timerFired(data)        
         redrawAllWrapper(canvas, data)
         # pause, then call timerFired again
         canvas.after(data.timerDelay, timerFiredWrapper, canvas, data)
+
     # Set up data and call init
     class Struct(object): pass
 
     data = Struct()
-    data.timerDelay = 500 # milliseconds
+    data.timerDelay = 200 # milliseconds
     root = Tk()
     root.resizable(width=False, height=False) # prevents resizing window
-    init(data, width, height, start, plan, map_env)
+    init(data, start, plan, map_env)
+
     # create the root and the canvas
     canvas = Canvas(root, width=(2*data.width), height=data.height)
     canvas.configure(bd=0, highlightthickness=0)
     canvas.pack()
-    # set up events
-    root.bind("<Button-1>", lambda event:
-                            mousePressedWrapper(event, canvas, data))
-    root.bind("<Key>", lambda event:
-                            keyPressedWrapper(event, canvas, data))
+
     timerFiredWrapper(canvas, data)
     # and launch the app
     root.mainloop()  # blocks until window is closed
-    print("bye!")
-
-def read_file(path):
-    with open(path, "rt") as f:
-        return f.read()
-
-def parse_map(map_file):
-    contents = read_file(map_file)
-    nums = contents.split()
-    num_rows = int(nums[0])
-    num_cols = int(nums[1])
-    nums = nums[2:]
-    map_env = []
-    for i in range(num_rows):
-        col = []
-        for j in range(num_cols):
-            col.append(int(nums[num_cols * i + j]))
-        map_env.append(col)
-    return map_env
 
 def actions_to_steps(plan, start):
     steps = []
@@ -227,19 +175,20 @@ def actions_to_steps(plan, start):
     return steps
 
 
-map_env = parse_map("map2.txt")
 
-start = (1, 0, E)
-goal = (4, 6, W)
-plan = plan(start, goal, map_env)
-print(plan)
+if __name__ == '__main__':
+    start_time = time.time()
+    map_env = Map_Environment(MAP_FILE, GRID_WIDTH, GRID_HEIGHT)
 
-steps = actions_to_steps(plan, start)
-print(steps)
-print(start)
-# fake_plan = [(0, +1, 0), (0, +1, 0), (0, +1, 0), (+1, +1, -2)]
-
-#visualize plan
-run(800, 800, start, steps, map_env)
+    #NOTE: these coordinates must be even
+    start = (8, 2, E)
+    goal = (8, 34, W)
+    actions = plan(start, goal, map_env)
+    plan = actions_to_steps(actions, start)
+    end_time = time.time()
+    total_time = end_time - start_time
+    print("Planner took %f seconds to compute:" % total_time)
+    # #visualize plan
+    run(start, plan, map_env)
 
 
