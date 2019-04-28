@@ -16,11 +16,23 @@ GRID_HEIGHT = 800
 FREE = 0
 OBSTACLE = 1
 COVERED = 2
+GOAL = 3
 
 def update_sensors(data):
-    (r, c) = data.pos 
+    (r, c) = data.pos
 
-def init(data, start, plan, map_env):
+    rad = 4
+    for dr in range(-rad, rad+1):
+        for dc in range(-rad, rad+1):
+            newR = r + dr
+            newC = c + dc
+            inRowRange = (0 <= newR) and (newR < len(data.map))
+            inColRange = (0 <= newC) and (newC < len(data.map[0]))
+
+            if(inRowRange and inColRange and data.map[newR][newC] == OBSTACLE):
+                data.view[newR][newC] = OBSTACLE
+
+def init(data, start, plan, goal, map_env):
     (r, c, theta) = start
     data.rows = map_env.rows
     data.cols = map_env.cols
@@ -52,9 +64,17 @@ def init(data, start, plan, map_env):
         PhotoImage(file="imgs/car315.gif"),   
         PhotoImage(file="imgs/car337_5.gif")
     ]
+
+    # mark goal
+    (x0, y0, x1, y1) = getCellBounds(goal[0], goal[1], data)
+    c1 = get_vehicle_coverage(x0, y0, goal[2], data.map_obj)
+    for (r,c) in c1:
+        data.view[r][c] = GOAL
+        data.map[r][c] = GOAL
+
+
     # for i in data.vehicle: //TODO: look into this
     #     print(i.width(), i.height())
-
 
 def getCellBounds(row, col, data):
     # aka "modelToView"
@@ -91,6 +111,7 @@ def takeStep(data, action):
     for (r,c) in c1:
         data.view[r][c] = COVERED
         data.map[r][c] = COVERED
+    update_sensors(data)
     
     
 def drawBoard(canvas, data):
@@ -98,27 +119,34 @@ def drawBoard(canvas, data):
         for col in range(data.cols):
             (x0, y0, x1, y1) = getCellBounds(row, col, data)            
             if(data.view[row][col] == FREE):
-                canvas.create_rectangle(x0, y0, x1, y1, outline="red",
+                canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
                                         fill="black")
             elif(data.view[row][col] == OBSTACLE):
-                canvas.create_rectangle(x0, y0, x1, y1, outline="red",
-                                        fill="yellow")
-            elif(data.view[row][col] == COVERED):
-                canvas.create_rectangle(x0, y0, x1, y1, outline="red",
+                canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
                                         fill="blue")
+            elif(data.view[row][col] == COVERED):
+                canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
+                                        fill="gray")
+            elif(data.view[row][col] == GOAL):
+                canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
+                                        fill="red")
             
             if(data.map[row][col] == FREE):
                 canvas.create_rectangle(x0 + data.width, y0,
-                                        x1 + data.width, y1, outline="red",
+                                        x1 + data.width, y1, outline="blue",
                                         fill="black")
             elif(data.map[row][col] == OBSTACLE):
                 canvas.create_rectangle(x0 + data.width, y0,
-                                        x1 + data.width, y1, outline="red",
-                                        fill="yellow")
+                                        x1 + data.width, y1, outline="blue",
+                                        fill="blue")
             elif(data.map[row][col] == COVERED):
                 canvas.create_rectangle(x0 + data.width, y0,
-                                        x1 + data.width, y1, outline="red",
-                                        fill="blue")
+                                        x1 + data.width, y1, outline="blue",
+                                        fill="gray")
+            elif(data.map[row][col] == GOAL):
+                canvas.create_rectangle(x0 + data.width, y0,
+                                        x1 + data.width, y1, outline="blue",
+                                        fill="red")
 
 def drawVehicle(canvas, data):
     (row, col) = data.pos
@@ -134,7 +162,7 @@ def redrawAll(canvas, data):
     drawVehicle(canvas, data)
 
 
-def run(start, plan, map_env):
+def run(start, plan, goal, map_env):
     def redrawAllWrapper(canvas, data):
         canvas.delete(ALL)
         canvas.create_rectangle(0, 0, (2*data.width), data.height,
@@ -155,7 +183,7 @@ def run(start, plan, map_env):
     data.timerDelay = 200 # milliseconds
     root = Tk()
     root.resizable(width=False, height=False) # prevents resizing window
-    init(data, start, plan, map_env)
+    init(data, start, plan, goal, map_env)
 
     # create the root and the canvas
     canvas = Canvas(root, width=(2*data.width), height=data.height)
@@ -188,7 +216,8 @@ if __name__ == '__main__':
     end_time = time.time()
     total_time = end_time - start_time
     print("Planner took %f seconds to compute:" % total_time)
-    # #visualize plan
-    run(start, plan, map_env)
+
+    # visualize plan
+    run(start, plan, goal, map_env)
 
 
