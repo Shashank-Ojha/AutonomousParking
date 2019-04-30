@@ -16,7 +16,7 @@ PARTIAL = 1
 
 #NOTE: these coordinates must be even
 start_config = (8, 2, E)
-goal_config = (8, 34, E)
+goal_configs = [(8, 34, E), (20, 24, W)] #(20, 18, E)
 model_type = FULL
 alpha = 1
 
@@ -39,9 +39,9 @@ def update_sensors(data):
             if(inRowRange and inColRange and data.map[newR][newC] == OBSTACLE):
                 data.view[newR][newC] = OBSTACLE
 
-def init(data, start, plan, goal, map_env):
+def init(data, start, plan, goals, map_env):
     (r, c, theta) = start
-    data.timerDelay = 200 # milliseconds
+    data.timerDelay = 50 # milliseconds
     data.divider_size = 80
     data.rows = map_env.rows
     data.cols = map_env.cols
@@ -77,12 +77,14 @@ def init(data, start, plan, goal, map_env):
         PhotoImage(file="imgs/car337_5.gif")
     ]
 
-    # mark goal
-    (x0, y0, x1, y1) = getCellBounds(goal[0], goal[1], data)
-    c1 = get_vehicle_coverage(x0, y0, goal[2], data.map_obj)
-    for (r,c) in c1:
-        data.view[r][c] = GOAL
-        data.map[r][c] = GOAL
+    # mark goals
+    for goal in goals:
+        (x_g, y_g, theta_g) = goal
+        (x0, y0, x1, y1) = getCellBounds(x_g, y_g, data)
+        c1 = get_vehicle_coverage(x0, y0, theta_g, data.map_obj)
+        for (r,c) in c1:
+            data.view[r][c] = GOAL
+            data.map[r][c] = GOAL
 
 
     # for i in data.vehicle: //TODO: look into this
@@ -191,7 +193,6 @@ def redrawAll(canvas, data):
     drawVehicle(canvas, data)
     drawLabels(canvas, data)
 
-
 def setup_canvas(root, data):
     canvas = Canvas(root,
                     width=(2*data.width) + data.divider_size,
@@ -235,9 +236,9 @@ def visualize(start, plan, goal, map_env):
 def run_planner():
     start_time = time.time()
     if(model_type == FULL):
-        plan = planner_full_known(start_config, goal_config, alpha, map_env)
+        plan = planner_full_known(start_config, goal_configs, alpha, map_env)
     else:
-        plan = planner_partial_known(start_config, goal_config, alpha, map_env)
+        plan = planner_partial_known(start_config, goal_configs, alpha, map_env)
 
     end_time = time.time()
     total_time = end_time - start_time
@@ -274,6 +275,6 @@ if __name__ == '__main__':
     plan = run_planner()
 
     # visualize plan
-    visualize(start_config, plan, goal_config, map_env)
+    visualize(start_config, plan, goal_configs, map_env)
 
 

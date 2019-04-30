@@ -62,7 +62,7 @@ We will discretize it with the following vehicle template using (x,y) format:
 
 def generate_vehicle_templates():
   template = []
-  for x in range(-31, 31, 3):
+  for x in range(-30, 31, 3): #30, 27 ->  27 30
     for y in range(-15, 15, 3):
      template.append((x,y))
 
@@ -126,10 +126,10 @@ def is_legal_position(r, c, theta, map_env):
     
   return True
 
-def are_legal_actions(state, actions, map_env):
+def are_legal_steps(state, steps, map_env):
   (r, c, theta) = state
-  for action in actions:
-    (dr, dc, dtheta) = action
+  for step in steps:
+    (dr, dc, dtheta) = step
     theta = (theta + dtheta) % ANGLE_DENSITY
     if(theta < 0):
       theta = ANGLE_DENSITY
@@ -146,8 +146,8 @@ class Action(object):
     return []
 
   def is_legal(self, state, map_env):
-    actions = self.effects(state)
-    return are_legal_actions(state, actions, map_env)
+    steps = self.effects(state)
+    return are_legal_steps(state, steps, map_env)
 
   def get_cost(self):
     return self.cost
@@ -417,13 +417,16 @@ class GraphState(object):
     def __repr__(self):
       return "GraphState"
 
-def heuristic(state, goal):
-  (r1, c1, _) = state
-  (r2, c2, _) = goal
-  delta_r = (r2 - r1) / 2
-  delta_c = (c2 - c1) / 2
-  distance = (delta_r * delta_r) + (delta_c * delta_c)
-  return sqrt(distance)
+def heuristic(state, goals):
+  maxH = 0
+  for goal in goals:
+    (r1, c1, _) = state
+    (r2, c2, _) = goal
+    delta_r = (r2 - r1) / 2
+    delta_c = (c2 - c1) / 2
+    distance = (delta_r * delta_r) + (delta_c * delta_c)
+    maxH = max(maxH, sqrt(distance))
+  return maxH
 
 def generate_action_template():
   action_template = []
@@ -458,8 +461,6 @@ def apply_action(state, action):
     (r, c, theta) = (r+dr, c+dc, new_theta)
   return (r, c, theta)
 
-
-
 def backtrace(graphState, start):
   actions = []
   while(graphState.state != start):
@@ -468,7 +469,7 @@ def backtrace(graphState, start):
   actions.reverse()    
   return actions
 
-def A_star(start, goal, alpha, map_env, action_template):
+def A_star(start, goals, alpha, map_env, action_template):
   pq = []
   visited = set()
   heappush(pq, GraphState(start, 0, 0, None, None))
@@ -476,17 +477,18 @@ def A_star(start, goal, alpha, map_env, action_template):
     currState = heappop(pq)
     visited.add(currState.state)
 
-    if(currState.state == goal):
+    if(currState.state in goals):
       plan = backtrace(currState, start)
       print("Plan found:", plan)
       return plan
 
     
     actions = generate_successors(currState.state, map_env, action_template)
+
     for action in actions:
       newState = apply_action(currState.state, action.effects(currState.state))
       g = currState.g + action.get_cost()
-      h = heuristic(newState, goal)
+      h = heuristic(newState, goals)
       f = g + alpha*h
       neighbor = GraphState(newState, g, f, action, currState)
       if(newState not in visited):
@@ -495,7 +497,7 @@ def A_star(start, goal, alpha, map_env, action_template):
   print("Plan NOT found")
   return []
 
-def computePathWithReuse(start, goal, alpha, visited, view, action_template):
+def computePathWithReuse(start, goals, alpha, visited, view, action_template):
   pq = []
   visited = {}
   heappush(pq, GraphState(start, 0, 0, None, None))
@@ -503,7 +505,7 @@ def computePathWithReuse(start, goal, alpha, visited, view, action_template):
     currState = heappop(pq)
     visited[currState.state] = currState
 
-    if(currState.state == goal):
+    if(currState.state in goals):
       plan = backtrace(currState, start)
       print("Plan found:", plan)
       return plan
@@ -513,7 +515,7 @@ def computePathWithReuse(start, goal, alpha, visited, view, action_template):
     for action in actions:
       newState = apply_action(currState.state, action.effects(currState.state))
       g = currState.g + action.get_cost()
-      h = heuristic(newState, goal)
+      h = heuristic(newState, goals)
       f = g + alpha*h
       neighbor = GraphState(newState, g, f, action, currState)
       if(newState not in visited):
@@ -542,7 +544,15 @@ def update_view(truth, view, pos):
                 
     return updated
 
-def D_star(start, goal, alpha, map_env, action_template):
+def actions_to_steps(actions, start):
+    steps = []
+    newState = start
+    for action in actions:
+        steps.extend(action.effects(newState))
+        newState = apply_action(newState, action.effects(newState))
+    return steps
+
+def D_star(start, goals, alpha, map_env, action_template):
   view = copy.deepcopy(map_env)
 
   #clear knowledge of the map
@@ -553,20 +563,26 @@ def D_star(start, goal, alpha, map_env, action_template):
   visited = {}
   actions = []
   pos = start
+  count = 0
   while(True):
-    current_optimal = computePathWithReuse(start, goal, alpha, visited,
-                                           view, action_template)
+    current_optimal = computePathWithReuse(start, goals, alpha, visited,view,
+                                           action_template)
     #check to see if path has changed and update full path based on that
 
-    for action in current_optimal:
+    for i in range(len(current_optimal)):
+      action = current_optimal[i]
       pos = apply_action(pos, action.effects(pos))
       actions.append(action)
-      if(pos == goal):
+      if(pos in goals):
+        print("Number of replans required = ", count)
         return actions
 
       cells_updated = update_view(map_env, view, pos)
       if(cells_updated):
-        break
+          future_steps = actions_to_steps(current_optimal[(i+1):], pos)
+          if(not are_legal_steps(pos, future_steps, view)):
+            # print("illegal:", current_optimal[(i+1):])
+            break
     
     # must be the case that view was updated
 
@@ -574,30 +590,21 @@ def D_star(start, goal, alpha, map_env, action_template):
     # for (r, c) in cells_updated:
     #   for theta in range(len(ANGLE_DENSITY)):
     #     if((r,c,theta) in visited):
-    actions.append(Halt())
+    # actions.append(Halt())
+    count += 1
     start = pos  
 
-
-
-def actions_to_steps(actions, start):
-    steps = []
-    newState = start
-    for action in actions:
-        steps.extend(action.effects(newState))
-        newState = apply_action(newState, action.effects(newState))
-    return steps
-
-def planner_full_known(start, goal, alpha, map_env):
+def planner_full_known(start, goals, alpha, map_env):
   action_template = generate_action_template()
   generate_vehicle_templates()
-  actions = A_star(start, goal, alpha, map_env, action_template)
+  actions = A_star(start, goals, alpha, map_env, action_template)
   plan = actions_to_steps(actions, start)
   return plan 
 
-def planner_partial_known(start, goal, alpha, map_env):
+def planner_partial_known(start, goals, alpha, map_env):
   action_template = generate_action_template()
   generate_vehicle_templates()
-  actions = D_star(start, goal, alpha, map_env, action_template)
+  actions = D_star(start, goals, alpha, map_env, action_template)
   plan = actions_to_steps(actions, start)
   return plan
 
