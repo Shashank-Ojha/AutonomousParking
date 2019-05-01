@@ -16,7 +16,9 @@ PARTIAL = 1
 
 #NOTE: these coordinates must be even
 start_config = (8, 2, E)
-goal_configs = [(8, 34, E), (20, 24, W)] #(20, 18, E)
+goal_configs = [(6, 16, E)]
+
+# goal_configs = [(8, 34, E)] #(20, 24, E)
 model_type = FULL
 alpha = 1
 
@@ -53,6 +55,11 @@ def init(data, start, plan, goals, map_env):
     data.t = 0
     data.plan = plan
     data.map = copy(map_env.map)
+    for r in range(data.rows):
+        for c in range(data.cols):
+            if(data.map[r][c] == COVERED):
+                data.map[r][c] = FREE
+    
     data.map_obj = map_env
     if(model_type == PARTIAL):
         data.view = [[0 for c in range(data.cols)] for r in range(data.rows)]
@@ -79,20 +86,19 @@ def init(data, start, plan, goals, map_env):
 
     # mark goals
     for goal in goals:
-        (x_g, y_g, theta_g) = goal
-        (x0, y0, x1, y1) = getCellBounds(x_g, y_g, data)
+        (r_g, c_g, theta_g) = goal
+        x0 = c_g * map_env.cell_width
+        y0 = r_g * map_env.cell_height
         c1 = get_vehicle_coverage(x0, y0, theta_g, data.map_obj)
         for (r,c) in c1:
             data.view[r][c] = GOAL
             data.map[r][c] = GOAL
 
-
     # for i in data.vehicle: //TODO: look into this
     #     print(i.width(), i.height())
 
+# returns (x0, y0, x1, y1) corners/bounding box of given cell in grid
 def getCellBounds(row, col, data):
-    # aka "modelToView"
-    # returns (x0, y0, x1, y1) corners/bounding box of given cell in grid
     gridWidth  = data.width - 2*data.margin
     gridHeight = data.height - 2*data.margin
     x0 = data.margin + gridWidth * col / data.cols
@@ -100,6 +106,10 @@ def getCellBounds(row, col, data):
     y0 = data.margin + gridHeight * row / data.rows
     y1 = data.margin + gridHeight * (row+1) / data.rows
     return (x0, y0, x1, y1)
+
+def keyPressed(event, data, start, plan, goal, map_env):
+    if (event.keysym == "r"): #reset simulation
+        init(data, start, plan, goal, map_env)
 
 def timerFired(data):
     if(data.t < len(data.plan)):
@@ -118,24 +128,26 @@ def takeStep(data, action):
 
     data.pos = (newRow, newCol)
     data.orientation =  (data.orientation + d0) % 16
-
+    
     # Update Tracks as you go
-    (x0, y0, x1, y1) = getCellBounds(newRow, newCol, data)
+    x0 = newCol * map_env.cell_width
+    y0 = newRow * map_env.cell_height
+
     c1 = get_vehicle_coverage(x0, y0, data.orientation, data.map_obj)
     for (r,c) in c1:
         data.view[r][c] = COVERED
         data.map[r][c] = COVERED
 
     update_sensors(data)
-    
-    
+       
 def drawBoard(canvas, data):
-    data.divider_size
-    canvas.create_rectangle
+    # Draw Divider
     canvas.create_rectangle(data.width, 0,
                             data.width + data.divider_size, data.height,
                             outline="blue",
                             fill="black")
+
+    # Draw both the Driver View and the Full Model Boards
     for row in range(data.rows):
         for col in range(data.cols):
             (x0, y0, x1, y1) = getCellBounds(row, col, data)            
@@ -210,6 +222,10 @@ def visualize(start, plan, goal, map_env):
                                 fill='black', width=0)
         redrawAll(canvas, data)
         canvas.update()    
+    
+    def keyPressedWrapper(event, canvas, data, start, plan, goal, map_env):
+        keyPressed(event, data, start, plan, goal, map_env)
+        redrawAllWrapper(canvas, data)
 
     def timerFiredWrapper(canvas, data):
         timerFired(data)        
@@ -229,6 +245,8 @@ def visualize(start, plan, goal, map_env):
     # create the canvas
     canvas = setup_canvas(root, data)
 
+    root.bind("<Key>", lambda event:
+         keyPressedWrapper(event, canvas, data, start, plan, goal, map_env))
     timerFiredWrapper(canvas, data)
     # and launch the app
     root.mainloop()  # blocks until window is closed

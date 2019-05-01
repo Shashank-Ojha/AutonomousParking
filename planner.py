@@ -3,6 +3,7 @@ import numpy
 from math import *
 import copy
 
+# Directions for the theta term in the state 
 E = 0
 NE = 2
 N = 4
@@ -12,9 +13,11 @@ SW = 10
 S = 12
 SE = 14
 
+# Number of distinct theta values
 ANGLE_DENSITY = 16
 ANGLE_UNIT = 360 / ANGLE_DENSITY
 
+# Number of Cells Changed for a Particular Action
 SHARP_LEFT = 2
 SLIGHT_LEFT = 1
 STRAIGHT = 0
@@ -27,13 +30,17 @@ EAST = +2
 WEST = -2
 CONSTANT = 0
 
+# Denotes the state of a grid cell
 FREE = 0
 OBSTACLE = 1
 COVERED = 2
 GOAL = 3
 
+# The Number of Grid Cells a Car see's from it's Center Point
 SENSOR_RAD = 5
 
+# Dictionaries to store the Vehicle Template rotated so it doesn't get 
+# recalculated every time
 coverage_map = {}
 vehicle_template = {}
 
@@ -59,11 +66,14 @@ Vehicle has the following dimensions:
 We will discretize it with the following vehicle template using (x,y) format:
 
 '''
+VEHICLE_X_RAD = 30
+VEHICLE_Y_RAD = 15
+VEHICLE_DENSITY = 3
 
 def generate_vehicle_templates():
   template = []
-  for x in range(-30, 31, 3): #30, 27 ->  27 30
-    for y in range(-15, 15, 3):
+  for x in range(-VEHICLE_X_RAD, VEHICLE_X_RAD+1, VEHICLE_DENSITY): 
+    for y in range(-VEHICLE_Y_RAD, VEHICLE_Y_RAD+1, VEHICLE_DENSITY):
      template.append((x,y))
 
   for theta in range(ANGLE_DENSITY):
@@ -80,7 +90,7 @@ def generate_vehicle_templates():
         vehicle_template[theta].append(point)
       else:
         vehicle_template[theta] = [point]
-
+  
 '''
 +-----------------------------------------------------------------------------+
 |                                                                             |
@@ -565,7 +575,7 @@ def D_star(start, goals, alpha, map_env, action_template):
   pos = start
   count = 0
   while(True):
-    current_optimal = computePathWithReuse(start, goals, alpha, visited,view,
+    current_optimal = computePathWithReuse(start, goals, alpha, visited, view,
                                            action_template)
     #check to see if path has changed and update full path based on that
 
