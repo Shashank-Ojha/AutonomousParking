@@ -16,9 +16,8 @@ PARTIAL = 1
 
 #NOTE: these coordinates must be even
 start_config = (8, 2, E)
-goal_configs = [(6, 16, E)]
-
-# goal_configs = [(8, 34, E)] #(20, 24, E)
+goal_configs = [(8, 34, E)]
+# goal_configs = [(8, 34, E), (20, 26, E)]
 model_type = FULL
 alpha = 1
 
@@ -43,7 +42,7 @@ def update_sensors(data):
 
 def init(data, start, plan, goals, map_env):
     (r, c, theta) = start
-    data.timerDelay = 50 # milliseconds
+    data.timerDelay = 200 # milliseconds
     data.divider_size = 80
     data.rows = map_env.rows
     data.cols = map_env.cols

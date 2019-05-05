@@ -3,6 +3,8 @@ import numpy
 from math import *
 import copy
 
+states_expanded = 0
+
 # Directions for the theta term in the state 
 E = 0
 NE = 2
@@ -511,13 +513,14 @@ def computePathWithReuse(start, goals, alpha, visited, view, action_template):
   pq = []
   visited = {}
   heappush(pq, GraphState(start, 0, 0, None, None))
+  global states_expanded
   while(len(pq) > 0):
     currState = heappop(pq)
     visited[currState.state] = currState
-
+    states_expanded += 1
     if(currState.state in goals):
       plan = backtrace(currState, start)
-      print("Plan found:", plan)
+      # print("Plan found:", plan)
       return plan
 
     
@@ -615,7 +618,10 @@ def planner_partial_known(start, goals, alpha, map_env):
   action_template = generate_action_template()
   generate_vehicle_templates()
   actions = D_star(start, goals, alpha, map_env, action_template)
+  global states_expanded
+  print("States Expanded: ", states_expanded)
   plan = actions_to_steps(actions, start)
+  print("Plan Length: ", len(plan))
   return plan
 
   
