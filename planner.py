@@ -2,6 +2,7 @@ from heapq import *
 import numpy
 from math import *
 import copy
+import time
 
 states_expanded = 0
 
@@ -40,6 +41,9 @@ GOAL = 3
 
 # The Number of Grid Cells a Car see's from it's Center Point
 SENSOR_RAD = 5
+
+#
+TIME_DENSITY = 50 # milliseconds
 
 # Dictionaries to store the Vehicle Template rotated so it doesn't get 
 # recalculated every time
@@ -576,18 +580,17 @@ def D_star(start, goals, alpha, map_env, action_template):
   visited = {}
   actions = []
   pos = start
-  count = 0
-  while(True):
-    current_optimal = computePathWithReuse(start, goals, alpha, visited, view,
-                                           action_template)
-    #check to see if path has changed and update full path based on that
+  replans = 0
 
-    for i in range(len(current_optimal)):
+  current_optimal = computePathWithReuse(start, goals, alpha, visited, view,
+                                           action_template)
+  while(True):
+    for i in range(len(current_optimal)): # follow plan until obstacle discovered
       action = current_optimal[i]
       pos = apply_action(pos, action.effects(pos))
       actions.append(action)
       if(pos in goals):
-        print("Number of replans required = ", count)
+        print("Number of replans required = ", replans)
         return actions
 
       cells_updated = update_view(map_env, view, pos)
@@ -603,9 +606,18 @@ def D_star(start, goals, alpha, map_env, action_template):
     # for (r, c) in cells_updated:
     #   for theta in range(len(ANGLE_DENSITY)):
     #     if((r,c,theta) in visited):
-    # actions.append(Halt())
-    count += 1
+
+    
+    replans += 1
     start = pos  
+    start_time = time.time()
+    current_optimal = computePathWithReuse(start, goals, alpha, visited, view,
+                                           action_template)
+    end_time = time.time()
+    total_time = end_time - start_time
+    halt_steps = total_time / (TIME_DENSITY/1000)
+    for i in range(int(halt_steps)):
+      actions.append(Halt())
 
 def planner_full_known(start, goals, alpha, map_env):
   action_template = generate_action_template()

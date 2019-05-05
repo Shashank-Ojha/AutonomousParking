@@ -42,7 +42,7 @@ def update_sensors(data):
 
 def init(data, start, plan, goals, map_env):
     (r, c, theta) = start
-    data.timerDelay = 200 # milliseconds
+    data.timerDelay = TIME_DENSITY # milliseconds
     data.divider_size = 80
     data.rows = map_env.rows
     data.cols = map_env.cols
