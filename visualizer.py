@@ -5,7 +5,7 @@ from tkinter import *
 from PIL import Image, ImageTk
 from map_environment import *
 from planner import *
-from copy import copy
+import copy
 import time
 
 # visualizer should take a sequence of updates (dr, dc, d0)
@@ -34,36 +34,59 @@ def update_sensors(data):
         for dc in range(-rad, rad+1):
             newR = r + dr
             newC = c + dc
-            inRowRange = (0 <= newR) and (newR < len(data.map))
-            inColRange = (0 <= newC) and (newC < len(data.map[0]))
+            inRowRange = (0 <= newR) and (newR < data.rows)
+            inColRange = (0 <= newC) and (newC < data.cols)
 
-            if(inRowRange and inColRange and data.map[newR][newC] == OBSTACLE):
-                data.view[newR][newC] = OBSTACLE
+            if(inRowRange and inColRange and data.view_map_env[newR][newC] == OBSTACLE):
+                data.view_map_env.map[newR][newC] = OBSTACLE
 
-def init(data, start, plan, goals, map_env):
+def run_planner(data):
+    start_time = time.time()
+    (r, c) = data.pos
+    curr_start_config = (r, c, data.orientation)
+
+    if(model_type == FULL):
+        print(curr_start_config)
+        print(goal_configs)
+        print(alpha)
+        print(data.complete_map_env.rows)
+        print(data.complete_map_env.cols)
+        print(data.complete_map_env.grid_width)
+        data.plan = planner_full_known(curr_start_config, goal_configs,
+                                       alpha, data.complete_map_env)
+    else:
+        data.plan = planner_partial_known(curr_start_config, goal_configs,
+                                          alpha, data.view_map_env)
+    if(not data.plan):
+        data.completed = True
+    end_time = time.time()
+    total_time = end_time - start_time
+
+    print("Planner took %f seconds to compute:" % total_time)
+
+def init(data, start, goals, map_env):
     (r, c, theta) = start
     data.timerDelay = 200 # milliseconds
     data.divider_size = 80
+    data.complete_map_env = map_env
+    data.view_map_env = copy.deepcopy(map_env)
+    if(model_type == PARTIAL):
+        for r in range(map_env.rows):
+            for c in range(map_env.cols):
+                data.view_map_env.map[r][c] = FREE
+
     data.rows = map_env.rows
     data.cols = map_env.cols
     data.margin = map_env.margin
     data.width = map_env.grid_width
     data.height = map_env.grid_height
+
     data.pos = (r, c)
     data.orientation = theta
     data.t = 0
-    data.plan = plan
-    data.map = copy(map_env.map)
-    for r in range(data.rows):
-        for c in range(data.cols):
-            if(data.map[r][c] == COVERED):
-                data.map[r][c] = FREE
-    
-    data.map_obj = map_env
-    if(model_type == PARTIAL):
-        data.view = [[0 for c in range(data.cols)] for r in range(data.rows)]
-    else:
-        data.view = copy(map_env.map)
+    data.completed = False
+    data.plan = []
+     
     data.vehicle = [
         PhotoImage(file="imgs/car_1inch.gif"),
         PhotoImage(file="imgs/car22_5.gif"),
@@ -88,10 +111,10 @@ def init(data, start, plan, goals, map_env):
         (r_g, c_g, theta_g) = goal
         x0 = c_g * map_env.cell_width
         y0 = r_g * map_env.cell_height
-        c1 = get_vehicle_coverage(x0, y0, theta_g, data.map_obj)
+        c1 = get_vehicle_coverage(x0, y0, theta_g, data.view_map_env)
         for (r,c) in c1:
-            data.view[r][c] = GOAL
-            data.map[r][c] = GOAL
+            data.complete_map_env.map[r][c] = GOAL
+            data.view_map_env.map[r][c] = GOAL
 
     # for i in data.vehicle: //TODO: look into this
     #     print(i.width(), i.height())
@@ -106,15 +129,19 @@ def getCellBounds(row, col, data):
     y1 = data.margin + gridHeight * (row+1) / data.rows
     return (x0, y0, x1, y1)
 
-def keyPressed(event, data, start, plan, goal, map_env):
+def keyPressed(event, data, start, goal, map_env):
     if (event.keysym == "r"): #reset simulation
-        init(data, start, plan, goal, map_env)
+        init(data, start, goal, map_env)
 
 def timerFired(data):
     if(data.t < len(data.plan)):
         action = data.plan[data.t]
         takeStep(data, action)
         data.t += 1
+        if(data.t == len(data.plan)):
+            data.completed = True
+    elif(not data.completed):
+        run_planner(data)
 
 def takeStep(data, action):
     (drow, dcol, d0) = action
@@ -132,12 +159,13 @@ def takeStep(data, action):
     x0 = newCol * map_env.cell_width
     y0 = newRow * map_env.cell_height
 
-    c1 = get_vehicle_coverage(x0, y0, data.orientation, data.map_obj)
+    c1 = get_vehicle_coverage(x0, y0, data.orientation, data.view_map_env)
     for (r,c) in c1:
-        data.view[r][c] = COVERED
-        data.map[r][c] = COVERED
+        data.view_map_env.map[r][c] = COVERED
+        data.complete_map_env.map[r][c] = COVERED
 
     update_sensors(data)
+
        
 def drawBoard(canvas, data):
     # Draw Divider
@@ -150,35 +178,35 @@ def drawBoard(canvas, data):
     for row in range(data.rows):
         for col in range(data.cols):
             (x0, y0, x1, y1) = getCellBounds(row, col, data)            
-            if(data.view[row][col] == FREE):
+            if(data.view_map_env.map[row][col] == FREE):
                 canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
                                         fill="black")
-            elif(data.view[row][col] == OBSTACLE):
+            elif(data.view_map_env.map[row][col] == OBSTACLE):
                 canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
                                         fill="blue")
-            elif(data.view[row][col] == COVERED):
+            elif(data.view_map_env.map[row][col] == COVERED):
                 canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
                                         fill="gray")
-            elif(data.view[row][col] == GOAL):
+            elif(data.view_map_env.map[row][col] == GOAL):
                 canvas.create_rectangle(x0, y0, x1, y1, outline="blue",
                                         fill="red")
             
-            if(data.map[row][col] == FREE):
+            if(data.complete_map_env.map[row][col] == FREE):
                 canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
                                         x1 + data.width + data.divider_size, y1,
                                         outline="blue",
                                         fill="black")
-            elif(data.map[row][col] == OBSTACLE):
+            elif(data.complete_map_env.map[row][col] == OBSTACLE):
                 canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
                                         x1 + data.width + data.divider_size, y1,
                                         outline="blue",
                                         fill="blue")
-            elif(data.map[row][col] == COVERED):
+            elif(data.complete_map_env.map[row][col] == COVERED):
                 canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
                                         x1 + data.width + data.divider_size, y1,
                                         outline="blue",
                                         fill="gray")
-            elif(data.map[row][col] == GOAL):
+            elif(data.complete_map_env.map[row][col] == GOAL):
                 canvas.create_rectangle(x0 + data.width + data.divider_size, y0,
                                         x1 + data.width + data.divider_size, y1,
                                         outline="blue",
@@ -212,7 +240,7 @@ def setup_canvas(root, data):
     canvas.pack()
     return canvas
 
-def visualize(start, plan, goal, map_env):
+def visualize(start, goals, map_env):
     def redrawAllWrapper(canvas, data):
         canvas.delete(ALL)
         canvas.create_rectangle(0, 0,
@@ -222,8 +250,8 @@ def visualize(start, plan, goal, map_env):
         redrawAll(canvas, data)
         canvas.update()    
     
-    def keyPressedWrapper(event, canvas, data, start, plan, goal, map_env):
-        keyPressed(event, data, start, plan, goal, map_env)
+    def keyPressedWrapper(event, canvas, data, start, goals, map_env):
+        keyPressed(event, data, start, goals, map_env)
         redrawAllWrapper(canvas, data)
 
     def timerFiredWrapper(canvas, data):
@@ -239,30 +267,16 @@ def visualize(start, plan, goal, map_env):
     root = Tk()
     root.resizable(width=False, height=False) # prevents resizing window
     root.title("Autonomous Vehicle Parking Planner Simulator")
-    init(data, start, plan, goal, map_env)
+    init(data, start, goals, map_env)
 
     # create the canvas
     canvas = setup_canvas(root, data)
 
     root.bind("<Key>", lambda event:
-         keyPressedWrapper(event, canvas, data, start, plan, goal, map_env))
+         keyPressedWrapper(event, canvas, data, start, plan, goals, map_env))
     timerFiredWrapper(canvas, data)
     # and launch the app
     root.mainloop()  # blocks until window is closed
-
-def run_planner():
-    start_time = time.time()
-    if(model_type == FULL):
-        plan = planner_full_known(start_config, goal_configs, alpha, map_env)
-    else:
-        plan = planner_partial_known(start_config, goal_configs, alpha, map_env)
-
-    end_time = time.time()
-    total_time = end_time - start_time
-
-    print("Planner took %f seconds to compute:" % total_time)
-
-    return plan
 
 def usage():
     print("USAGE:")
@@ -289,9 +303,9 @@ def parse_arguments():
 if __name__ == '__main__':
     parse_arguments()
     map_env = Map_Environment(MAP_FILE, GRID_WIDTH, GRID_HEIGHT)
-    plan = run_planner()
+    generate_vehicle_templates() # Preprocessing needed for planner
 
     # visualize plan
-    visualize(start_config, plan, goal_configs, map_env)
+    visualize(start_config, goal_configs, map_env)
 
 
